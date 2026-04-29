@@ -1,4 +1,5 @@
 (async () => {
+  const SCRIPT_VERSION = "2026-04-29-scroll-activate-v2";
   const debug = [];
   const startedAt = new Date();
 
@@ -48,6 +49,7 @@
 
   try {
     log("start", {
+      scriptVersion: SCRIPT_VERSION,
       href: location.href,
       title: document.title,
       userAgent: navigator.userAgent,
@@ -154,13 +156,34 @@
       }
     };
 
-    const activateElement = (el, label = "element") => {
+    const activateElement = async (el, label = "element") => {
       if (!el) {
         log("activate_skip_null", { label });
         return false;
       }
 
-      const rect = el.getBoundingClientRect();
+      let rect = el.getBoundingClientRect();
+      const wasOutOfViewport = rect.bottom < 0
+        || rect.top > window.innerHeight
+        || rect.right < 0
+        || rect.left > window.innerWidth;
+
+      if (wasOutOfViewport) {
+        log("activate_scroll_into_view", {
+          label,
+          before: visibleInfo(el),
+        });
+
+        el.scrollIntoView({
+          block: "center",
+          inline: "center",
+          behavior: "instant",
+        });
+
+        await sleep(250);
+        rect = el.getBoundingClientRect();
+      }
+
       const x = Math.max(0, Math.round(rect.left + rect.width / 2));
       const y = Math.max(0, Math.round(rect.top + rect.height / 2));
       const base = {
@@ -180,15 +203,21 @@
         label,
         x,
         y,
+        wasOutOfViewport,
         element: visibleInfo(el),
       });
 
       el.focus?.({ preventScroll: true });
 
-      fireEvent(el, "pointerover", PointerEvent, { ...base, pointerId: 1, pointerType: "touch", isPrimary: true });
-      fireEvent(el, "pointerenter", PointerEvent, { ...base, pointerId: 1, pointerType: "touch", isPrimary: true });
+      fireEvent(el, "pointerover", PointerEvent, { ...base, pointerId: 1, pointerType: "mouse", isPrimary: true });
+      fireEvent(el, "pointerenter", PointerEvent, { ...base, pointerId: 1, pointerType: "mouse", isPrimary: true });
       fireEvent(el, "mouseover", MouseEvent, base);
       fireEvent(el, "mouseenter", MouseEvent, base);
+      fireEvent(el, "pointerdown", PointerEvent, { ...base, pointerId: 1, pointerType: "mouse", isPrimary: true });
+      fireEvent(el, "mousedown", MouseEvent, base);
+      fireEvent(el, "pointerup", PointerEvent, { ...base, pointerId: 1, pointerType: "mouse", isPrimary: true, buttons: 0 });
+      fireEvent(el, "mouseup", MouseEvent, { ...base, buttons: 0 });
+      fireEvent(el, "click", MouseEvent, { ...base, buttons: 0, detail: 1 });
       fireEvent(el, "pointerdown", PointerEvent, { ...base, pointerId: 1, pointerType: "touch", isPrimary: true });
       fireEvent(el, "touchstart", TouchEvent, { bubbles: true, cancelable: true, composed: true });
       fireEvent(el, "mousedown", MouseEvent, base);
@@ -283,8 +312,8 @@
     let missedEditMenus = 0;
 
     for (const [index, button] of optionButtons.entries()) {
-      activateElement(button, `option_button_${index}`);
-      await sleep(100);
+      await activateElement(button, `option_button_${index}`);
+      await sleep(250);
 
       const editItem = await findEditItem();
 
@@ -294,9 +323,9 @@
         continue;
       }
 
-      activateElement(editItem, `edit_item_${index}`);
+      await activateElement(editItem, `edit_item_${index}`);
       openedEditors += 1;
-      await sleep(350);
+      await sleep(500);
     }
 
     const messageGroups = [...document.querySelectorAll("div[data-message-group-id]")];
