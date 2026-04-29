@@ -1,5 +1,5 @@
 (async () => {
-  const SCRIPT_VERSION = "2026-04-29-menu-mouse-pointerdown-edit-activate-v7";
+  const SCRIPT_VERSION = "v8";
   const debug = [];
   const startedAt = new Date();
 
@@ -12,7 +12,7 @@
   };
 
   const saveTextFile = (text, fileName, type = "text/plain;charset=utf-8") => {
-    const blob = new Blob(["\ufeff", text], { type });
+    const blob = new Blob([text], { type });
     const url = URL.createObjectURL(blob);
     const a = Object.assign(document.createElement("a"), {
       href: url,
@@ -88,19 +88,16 @@
       fileName += ".jsonl";
     }
 
-    log("prompt_done", {
-      user,
-      char,
-      fileName,
-    });
+    log("prompt_done", { user, char, fileName });
 
     const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-    const escapeAttr = (value) => String(value)
-      .replace(/&/g, "&amp;")
-      .replace(/"/g, "&quot;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+    const escapeAttr = (value) =>
+      String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
 
     const visibleInfo = (el) => {
       if (!el) return null;
@@ -121,9 +118,10 @@
       };
     };
 
-    const countEditCandidates = () => [...document.querySelectorAll("button, div, span, li, a")]
-      .filter((el) => el.innerText?.trim().includes("수정"))
-      .length;
+    const countEditCandidates = () =>
+      [...document.querySelectorAll("button, div, span, li, a")].filter((el) =>
+        el.innerText?.trim().includes("수정")
+      ).length;
 
     const mousePointerDown = (el, label = "element") => {
       if (!el) {
@@ -136,9 +134,11 @@
         element: visibleInfo(el),
       });
 
-      el.dispatchEvent(new MouseEvent("pointerdown", {
-        bubbles: true,
-      }));
+      el.dispatchEvent(
+        new MouseEvent("pointerdown", {
+          bubbles: true,
+        })
+      );
 
       return true;
     };
@@ -187,20 +187,60 @@
 
       el.focus?.({ preventScroll: true });
 
-      fireEvent(el, "pointerover", PointerEvent, { ...base, pointerId: 1, pointerType: "mouse", isPrimary: true });
-      fireEvent(el, "pointerenter", PointerEvent, { ...base, pointerId: 1, pointerType: "mouse", isPrimary: true });
+      fireEvent(el, "pointerover", PointerEvent, {
+        ...base,
+        pointerId: 1,
+        pointerType: "mouse",
+        isPrimary: true,
+      });
+      fireEvent(el, "pointerenter", PointerEvent, {
+        ...base,
+        pointerId: 1,
+        pointerType: "mouse",
+        isPrimary: true,
+      });
       fireEvent(el, "mouseover", MouseEvent, base);
       fireEvent(el, "mouseenter", MouseEvent, base);
-      fireEvent(el, "pointerdown", PointerEvent, { ...base, pointerId: 1, pointerType: "mouse", isPrimary: true });
+      fireEvent(el, "pointerdown", PointerEvent, {
+        ...base,
+        pointerId: 1,
+        pointerType: "mouse",
+        isPrimary: true,
+      });
       fireEvent(el, "mousedown", MouseEvent, base);
-      fireEvent(el, "pointerup", PointerEvent, { ...base, pointerId: 1, pointerType: "mouse", isPrimary: true, buttons: 0 });
+      fireEvent(el, "pointerup", PointerEvent, {
+        ...base,
+        pointerId: 1,
+        pointerType: "mouse",
+        isPrimary: true,
+        buttons: 0,
+      });
       fireEvent(el, "mouseup", MouseEvent, { ...base, buttons: 0 });
       fireEvent(el, "click", MouseEvent, { ...base, buttons: 0, detail: 1 });
-      fireEvent(el, "pointerdown", PointerEvent, { ...base, pointerId: 1, pointerType: "touch", isPrimary: true });
-      fireEvent(el, "touchstart", TouchEvent, { bubbles: true, cancelable: true, composed: true });
+      fireEvent(el, "pointerdown", PointerEvent, {
+        ...base,
+        pointerId: 1,
+        pointerType: "touch",
+        isPrimary: true,
+      });
+      fireEvent(el, "touchstart", TouchEvent, {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      });
       fireEvent(el, "mousedown", MouseEvent, base);
-      fireEvent(el, "pointerup", PointerEvent, { ...base, pointerId: 1, pointerType: "touch", isPrimary: true, buttons: 0 });
-      fireEvent(el, "touchend", TouchEvent, { bubbles: true, cancelable: true, composed: true });
+      fireEvent(el, "pointerup", PointerEvent, {
+        ...base,
+        pointerId: 1,
+        pointerType: "touch",
+        isPrimary: true,
+        buttons: 0,
+      });
+      fireEvent(el, "touchend", TouchEvent, {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      });
       fireEvent(el, "mouseup", MouseEvent, { ...base, buttons: 0 });
       fireEvent(el, "click", MouseEvent, { ...base, buttons: 0, detail: 1 });
 
@@ -252,11 +292,12 @@
       return null;
     };
 
-    const markdownToHtml = (text) => String(text || "")
-      .trim()
-      .replace(/!\[([^\]]*)\]\(\s*([^)]+?)\s*\)/g, (_match, alt, src) => (
-        `<img alt="${escapeAttr(alt)}" src="${escapeAttr(src)}">`
-      ));
+    const markdownToHtml = (text) =>
+      String(text || "")
+        .trim()
+        .replace(/!\[([^\]]*)\]\(\s*([^)]+?)\s*\)/g, (_match, alt, src) => {
+          return `<img alt="${escapeAttr(alt)}" src="${escapeAttr(src)}">`;
+        });
 
     log("selectors_before_edit", {
       optionButtonCount: document.querySelectorAll('button[aria-label="메시지 옵션"]').length,
@@ -267,17 +308,15 @@
       roleElementCount: document.querySelectorAll("[role]").length,
       buttonAriaLabelCount: document.querySelectorAll("button[aria-label]").length,
       editTextCandidateCount: countEditCandidates(),
-      messageGroupsWithOptionButtonCount: [...document.querySelectorAll("div[data-message-group-id]")]
-        .filter((el) => el.querySelector('button[aria-label="메시지 옵션"]'))
-        .length,
-      messageGroupsWithTextareaCount: [...document.querySelectorAll("div[data-message-group-id]")]
-        .filter((el) => el.querySelector("textarea"))
-        .length,
+      messageGroupsWithOptionButtonCount: [...document.querySelectorAll("div[data-message-group-id]")].filter((el) =>
+        el.querySelector('button[aria-label="메시지 옵션"]')
+      ).length,
+      messageGroupsWithTextareaCount: [...document.querySelectorAll("div[data-message-group-id]")].filter((el) =>
+        el.querySelector("textarea")
+      ).length,
     });
 
-    const optionButtons = [
-      ...document.querySelectorAll('button[aria-label="메시지 옵션"]'),
-    ].reverse();
+    const optionButtons = [...document.querySelectorAll('button[aria-label="메시지 옵션"]')].reverse();
 
     let openedEditors = 0;
     let missedEditMenus = 0;
@@ -340,6 +379,8 @@
           is_system: false,
           send_date: "",
           mes,
+          extra: {},
+          force_avatar: "",
         };
       })
       .filter(Boolean);
@@ -350,14 +391,7 @@
       characterRowCount: rows.filter((row) => !row.is_user).length,
     });
 
-    const header = {
-      user_name: user,
-      character_name: char,
-      create_date: new Date().toISOString(),
-      chat_metadata: {},
-    };
-
-    const jsonl = [header, ...rows].map((row) => JSON.stringify(row)).join("\n");
+    const jsonl = rows.map((row) => JSON.stringify(row)).join("\n");
 
     saveTextFile(jsonl, fileName, "application/jsonl;charset=utf-8");
     saveDebugLog(rows.length === 0 ? "zero_rows" : "success");
