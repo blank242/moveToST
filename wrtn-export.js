@@ -11,7 +11,7 @@
   };
 
   const saveTextFile = (text, fileName, type = "text/plain;charset=utf-8") => {
-    const blob = new Blob([text], { type });
+    const blob = new Blob(["\ufeff", text], { type });
     const url = URL.createObjectURL(blob);
     const a = Object.assign(document.createElement("a"), {
       href: url,
@@ -132,9 +132,80 @@
         element: visibleInfo(el),
       });
 
-      el.dispatchEvent(new MouseEvent("Mousedown", {
+      el.dispatchEvent(new PointerEvent("pointerdown", {
         bubbles: true,
+        cancelable: true,
+        pointerType: "mouse",
       }));
+
+      return true;
+    };
+
+    const fireEvent = (el, type, EventClass, options) => {
+      try {
+        el.dispatchEvent(new EventClass(type, options));
+        return true;
+      } catch (error) {
+        log("event_dispatch_failed", {
+          type,
+          message: error?.message || String(error),
+        });
+        return false;
+      }
+    };
+
+    const activateElement = (el, label = "element") => {
+      if (!el) {
+        log("activate_skip_null", { label });
+        return false;
+      }
+
+      const rect = el.getBoundingClientRect();
+      const x = Math.max(0, Math.round(rect.left + rect.width / 2));
+      const y = Math.max(0, Math.round(rect.top + rect.height / 2));
+      const base = {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        view: window,
+        clientX: x,
+        clientY: y,
+        screenX: x,
+        screenY: y,
+        button: 0,
+        buttons: 1,
+      };
+
+      log("activate", {
+        label,
+        x,
+        y,
+        element: visibleInfo(el),
+      });
+
+      el.focus?.({ preventScroll: true });
+
+      fireEvent(el, "pointerover", PointerEvent, { ...base, pointerId: 1, pointerType: "touch", isPrimary: true });
+      fireEvent(el, "pointerenter", PointerEvent, { ...base, pointerId: 1, pointerType: "touch", isPrimary: true });
+      fireEvent(el, "mouseover", MouseEvent, base);
+      fireEvent(el, "mouseenter", MouseEvent, base);
+      fireEvent(el, "pointerdown", PointerEvent, { ...base, pointerId: 1, pointerType: "touch", isPrimary: true });
+      fireEvent(el, "touchstart", TouchEvent, { bubbles: true, cancelable: true, composed: true });
+      fireEvent(el, "mousedown", MouseEvent, base);
+      fireEvent(el, "pointerup", PointerEvent, { ...base, pointerId: 1, pointerType: "touch", isPrimary: true, buttons: 0 });
+      fireEvent(el, "touchend", TouchEvent, { bubbles: true, cancelable: true, composed: true });
+      fireEvent(el, "mouseup", MouseEvent, { ...base, buttons: 0 });
+      fireEvent(el, "click", MouseEvent, { ...base, buttons: 0, detail: 1 });
+
+      try {
+        el.click?.();
+        log("native_click_called", { label });
+      } catch (error) {
+        log("native_click_failed", {
+          label,
+          message: error?.message || String(error),
+        });
+      }
 
       return true;
     };
@@ -212,7 +283,7 @@
     let missedEditMenus = 0;
 
     for (const [index, button] of optionButtons.entries()) {
-      pointerDown(button, `option_button_${index}`);
+      activateElement(button, `option_button_${index}`);
       await sleep(100);
 
       const editItem = await findEditItem();
@@ -223,9 +294,9 @@
         continue;
       }
 
-      pointerDown(editItem, `edit_item_${index}`);
+      activateElement(editItem, `edit_item_${index}`);
       openedEditors += 1;
-      await sleep(100);
+      await sleep(350);
     }
 
     const messageGroups = [...document.querySelectorAll("div[data-message-group-id]")];
