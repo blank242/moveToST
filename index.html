@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wrtn JSONL Bookmarklet</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #25212b;
+      --muted: #675f73;
+      --paper: #fffdf7;
+      --panel: #ffffff;
+      --line: #eadfce;
+      --mint: #bcebd9;
+      --coral: #ffb6a3;
+      --lemon: #ffe39b;
+      --blue: #b9d9ff;
+      --shadow: 0 16px 40px rgba(55, 42, 29, 0.14);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        linear-gradient(90deg, rgba(255, 182, 163, 0.18) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(255, 182, 163, 0.18) 1px, transparent 1px),
+        var(--paper);
+      background-size: 28px 28px;
+      letter-spacing: -0.2px;
+    }
+
+    main {
+      width: min(960px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 48px 0;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 220px;
+      gap: 28px;
+      align-items: center;
+      margin-bottom: 28px;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(32px, 6vw, 58px);
+      line-height: 1.02;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      margin: 0;
+      max-width: 650px;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.65;
+    }
+
+    .bookmark-visual {
+      position: relative;
+      width: 190px;
+      aspect-ratio: 1;
+      justify-self: center;
+    }
+
+    .bookmark {
+      position: absolute;
+      inset: 18px 42px 28px;
+      background: var(--coral);
+      border: 3px solid var(--ink);
+      border-radius: 10px 10px 4px 4px;
+      box-shadow: 10px 10px 0 var(--mint);
+    }
+
+    .bookmark::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      bottom: -3px;
+      width: 50px;
+      height: 42px;
+      background: var(--paper);
+      border-left: 3px solid var(--ink);
+      border-top: 3px solid var(--ink);
+      transform: translateX(-50%) translateY(50%) rotate(45deg);
+    }
+
+    .spark {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      background: var(--lemon);
+      border: 2px solid var(--ink);
+      transform: rotate(45deg);
+    }
+
+    .spark.one {
+      top: 10px;
+      left: 12px;
+    }
+
+    .spark.two {
+      right: 18px;
+      bottom: 24px;
+      background: var(--blue);
+    }
+
+    .panel {
+      background: rgba(255, 255, 255, 0.92);
+      border: 2px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      padding: 22px;
+      margin-bottom: 18px;
+    }
+
+    .copy-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 116px;
+      resize: vertical;
+      border: 2px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+      color: var(--ink);
+      background: #fffaf0;
+      font: 13px/1.45 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    }
+
+    button,
+    .drag-link {
+      appearance: none;
+      border: 2px solid var(--ink);
+      border-radius: 12px;
+      background: var(--mint);
+      color: var(--ink);
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 5px 5px 0 var(--ink);
+      transition: transform 140ms ease, box-shadow 140ms ease;
+      text-align: center;
+      text-decoration: none;
+    }
+
+    button {
+      min-width: 132px;
+      padding: 12px 16px;
+    }
+
+    .drag-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 46px;
+      padding: 10px 14px;
+      background: var(--lemon);
+    }
+
+    button:hover,
+    .drag-link:hover {
+      transform: translate(-2px, -2px);
+      box-shadow: 7px 7px 0 var(--ink);
+    }
+
+    button:active,
+    .drag-link:active {
+      transform: translate(2px, 2px);
+      box-shadow: 3px 3px 0 var(--ink);
+    }
+
+    .status {
+      margin-top: 12px;
+      min-height: 22px;
+      color: #3f735f;
+      font-weight: 700;
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 22px;
+      letter-spacing: 0;
+    }
+
+    ol {
+      margin: 0;
+      padding-left: 22px;
+      color: var(--muted);
+      line-height: 1.75;
+    }
+
+    li + li {
+      margin-top: 6px;
+    }
+
+    code {
+      padding: 2px 5px;
+      border-radius: 6px;
+      background: #f6ead7;
+      color: var(--ink);
+      font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    }
+
+    .note {
+      margin: 12px 0 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .help{
+
+      text-align: right;
+      margin-left: auto;
+    }
+    .help a{
+      color: #0b7a75;
+      font-weight: bold;
+    }
+
+    .note{
+      background-color: #ffeef2;
+      border-radius: 14px;
+      margin-bottom: 16px;
+      padding: 16px;
+    }
+
+    @media (max-width: 720px) {
+      h1{text-align: center; font-size: 24px;}
+      main {
+        width: min(100% - 22px, 960px);
+        padding: 28px 0;
+      }
+
+      .hero {
+        grid-template-columns: 1fr;
+      }
+
+      .bookmark-visual {
+        width: 128px;
+        order: -1;
+      }
+
+      .copy-row {
+        grid-template-columns: 1fr;
+      }
+
+      button, .drag-link {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <div>
+        <h1>🍘크랙 이삿짐 싸기🍘</h1>
+        <p class="lead">북마클릿 기능으로 간단하게 크랙 이삿짐을 싸봅시다! SillyTavern용 채팅 파일을 바로 저장할 수 있어요.</p>
+        <p class="help"><a href="https://m.blog.naver.com/catives/223375593287" target="_blank">🤨북마클릿이란?</a></p>
+      </div>
+      <div class="bookmark-visual" aria-hidden="true">
+        <div class="spark one"></div>
+        <div class="bookmark"></div>
+        <div class="spark two"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>북마클릿 복사</h2>
+      <div class="copy-row">
+        <textarea id="bookmarklet" readonly spellcheck="false"></textarea>
+        <button id="copyButton" type="button">복사하기</button>
+      </div>
+      <div class="actions">
+        <a id="dragLink" class="drag-link" href="#">PC에서는 이 버튼을 북마크바로 드래그</a>
+      </div>
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="panel">
+      <h2>사용 방법</h2>
+      <ol>
+        <li>위의 <code>복사하기</code> 버튼을 누릅니다.</li>
+        <li>인터넷 브라우저 앱에서 아무 페이지나 열고 <strong>새 북마크</strong>를 만들어줍니다.</li>
+        <li>북마크 목록에서 방금 만든 북마크를 찾고 <code>수정</code> 버튼을 누릅니다.</li>
+        <li><strong>이름 칸</strong>에는 알아보기 쉬운 새 이름을, <strong>URL 칸</strong>에는 방금 복사한 코드를 붙여넣습니다.</li>
+        <li>이삿짐을 싸고 싶은 채팅 페이지로 들어가서 맨 첫번째 채팅까지 스크롤을 올려 모두 로딩합니다.</li>
+        <li>그 페이지에서 아까 저장한 북마크를 바로 <code>실행</code>합니다.<br />
+          <p class="note">모바일 Chrome은 주소창에 북마크 이름을 입력한 뒤 검색 결과에 뜨는 북마크를 선택하는 방식이 더 잘 됩니다. iPhone에서는 Safari에서 먼저 테스트하는 편이 안정적입니다.</p>
+        </li>
+        <li><code>유저 이름</code>, <code>캐릭터 이름</code>, <code>저장 파일명</code>을 차례대로 입력합니다.<br />
+          <p class="note">유저 이름과 캐릭터 이름은 채팅 창에서 메시지를 보낸 사람의 이름이 됩니다.</p></li>
+        <li>잠시 기다리면 <code>.jsonl</code> 파일이 다운로드됩니다!<br />
+          <p class="note">jsonl 파일은 실리태번이 채팅을 저장하는 파일 형식이에요. 해당 파일을 채팅으로 불러오면 이사 완료! </p></li>
+      </ol>
+
+    </section>
+
+    <section class="panel">
+      <h2>실행이 안 되나요?</h2>
+      <p>🐢고고에게 물어보세요!!</p>
+    </section>
+  </main>
+
+  <script>
+    const bookmarklet = `javascript:(async()=>{const user=prompt("user 이름을 입력하세요","");if(user===null)return;const char=prompt("ai 캐릭터의 이름을 입력하세요","");if(char===null)return;let fileName=prompt("저장할 파일명을 입력하세요","messages.jsonl");if(fileName===null)return;fileName=fileName.trim()||"messages.jsonl";if(!fileName.toLowerCase().endsWith(".jsonl"))fileName+=".jsonl";const sleep=ms=>new Promise(r=>setTimeout(r,ms)),escapeAttr=v=>String(v).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;"),pointerDown=el=>{if(!el)return;el.dispatchEvent(new PointerEvent("pointerdown",{bubbles:true,cancelable:true,pointerType:"mouse"}))},findEditItem=async(timeout=3000)=>{const endAt=Date.now()+timeout;while(Date.now()<endAt){const editItem=[...document.querySelectorAll('div[role="menuitem"]')].find(el=>el.innerText.trim()==="수정");if(editItem)return editItem;await sleep(100)}},markdownToHtml=text=>String(text||"").trim().replace(/!\\[([^\\]]*)\\]\\(\\s*([^)]+?)\\s*\\)/g,(_m,alt,src)=>\`<img alt="\${escapeAttr(alt)}" src="\${escapeAttr(src)}">\`);for(const button of[...document.querySelectorAll('button[aria-label="메시지 옵션"]')].reverse()){pointerDown(button);await sleep(100);const editItem=await findEditItem();pointerDown(editItem);await sleep(100)}const rows=[...document.querySelectorAll("div[data-message-group-id]")].reverse().map(groupEl=>{const mes=markdownToHtml(groupEl.querySelector("textarea")?.value||"");if(!mes)return null;const isUser=!!groupEl.querySelector('button[aria-label="메시지 옵션"]');return{name:isUser?user:char,is_user:isUser,is_system:false,send_date:"",mes}}).filter(Boolean);const header={user_name:user,character_name:char,create_date:new Date().toISOString(),chat_metadata:{}};const jsonl=[header,...rows].map(row=>JSON.stringify(row)).join("\\n");const blob=new Blob([jsonl],{type:"application/jsonl;charset=utf-8"});const url=URL.createObjectURL(blob);const a=Object.assign(document.createElement("a"),{href:url,download:fileName});document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);alert(\`\${rows.length}개 메시지 저장 완료\\n파일명: \${fileName}\`);console.log(rows)})();`;
+
+    const textarea = document.querySelector("#bookmarklet");
+    const copyButton = document.querySelector("#copyButton");
+    const status = document.querySelector("#status");
+    const dragLink = document.querySelector("#dragLink");
+
+    textarea.value = bookmarklet;
+    dragLink.href = bookmarklet;
+
+    copyButton.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(bookmarklet);
+        status.textContent = "복사 완료! 북마크 URL에 붙여넣으면 됩니다.";
+        alert("복사 완료!");
+      } catch {
+        textarea.focus();
+        textarea.select();
+        document.execCommand("copy");
+        status.textContent = "코드를 선택해두었습니다. 복사가 안 됐다면 직접 복사하세요.";
+      }
+    });
+  </script>
+</body>
+</html>
