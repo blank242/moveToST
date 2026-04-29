@@ -1,5 +1,5 @@
 (async () => {
-  const SCRIPT_VERSION = "2026-04-29-scroll-activate-v3";
+  const SCRIPT_VERSION = "2026-04-29-menu-mouse-pointerdown-edit-activate-v7";
   const debug = [];
   const startedAt = new Date();
 
@@ -125,21 +125,19 @@
       .filter((el) => el.innerText?.trim().includes("수정"))
       .length;
 
-    const pointerDown = (el, label = "element") => {
+    const mousePointerDown = (el, label = "element") => {
       if (!el) {
-        log("pointerdown_skip_null", { label });
+        log("mouse_pointerdown_skip_null", { label });
         return false;
       }
 
-      log("pointerdown", {
+      log("mouse_pointerdown", {
         label,
         element: visibleInfo(el),
       });
 
-      el.dispatchEvent(new PointerEvent("pointerdown", {
+      el.dispatchEvent(new MouseEvent("pointerdown", {
         bubbles: true,
-        cancelable: true,
-        pointerType: "mouse",
       }));
 
       return true;
@@ -158,34 +156,13 @@
       }
     };
 
-    const activateElement = async (el, label = "element") => {
+    const activateElement = (el, label = "element") => {
       if (!el) {
         log("activate_skip_null", { label });
         return false;
       }
 
-      let rect = el.getBoundingClientRect();
-      const wasOutOfViewport = rect.bottom < 0
-        || rect.top > window.innerHeight
-        || rect.right < 0
-        || rect.left > window.innerWidth;
-
-      if (wasOutOfViewport) {
-        log("activate_scroll_into_view", {
-          label,
-          before: visibleInfo(el),
-        });
-
-        el.scrollIntoView({
-          block: "center",
-          inline: "center",
-          behavior: "instant",
-        });
-
-        await sleep(250);
-        rect = el.getBoundingClientRect();
-      }
-
+      const rect = el.getBoundingClientRect();
       const x = Math.max(0, Math.round(rect.left + rect.width / 2));
       const y = Math.max(0, Math.round(rect.top + rect.height / 2));
       const base = {
@@ -205,7 +182,6 @@
         label,
         x,
         y,
-        wasOutOfViewport,
         element: visibleInfo(el),
       });
 
@@ -307,8 +283,8 @@
     let missedEditMenus = 0;
 
     for (const [index, button] of optionButtons.entries()) {
-      await activateElement(button, `option_button_${index}`);
-      await sleep(250);
+      mousePointerDown(button, `option_button_${index}`);
+      await sleep(100);
 
       const editItem = await findEditItem();
 
@@ -318,9 +294,9 @@
         continue;
       }
 
-      await activateElement(editItem, `edit_item_${index}`);
+      activateElement(editItem, `edit_item_${index}`);
       openedEditors += 1;
-      await sleep(500);
+      await sleep(350);
     }
 
     const messageGroups = [...document.querySelectorAll("div[data-message-group-id]")];
