@@ -132,10 +132,8 @@
         element: visibleInfo(el),
       });
 
-      el.dispatchEvent(new PointerEvent("pointerdown", {
+      el.dispatchEvent(new MouseEvent("Mousedown", {
         bubbles: true,
-        cancelable: true,
-        pointerType: "mouse",
       }));
 
       return true;
