@@ -1,5 +1,5 @@
 (async () => {
-  const SCRIPT_VERSION = "2026-04-29-scroll-activate-v2";
+  const SCRIPT_VERSION = "2026-04-29-scroll-activate-v3";
   const debug = [];
   const startedAt = new Date();
 
@@ -110,7 +110,6 @@
 
       return {
         tag: el.tagName,
-        text: el.innerText?.trim().slice(0, 160) || "",
         ariaLabel: el.getAttribute("aria-label"),
         role: el.getAttribute("role"),
         width: Math.round(rect.width),
@@ -119,9 +118,12 @@
         left: Math.round(rect.left),
         display: style.display,
         visibility: style.visibility,
-        html: el.outerHTML?.slice(0, 500) || "",
       };
     };
+
+    const countEditCandidates = () => [...document.querySelectorAll("button, div, span, li, a")]
+      .filter((el) => el.innerText?.trim().includes("수정"))
+      .length;
 
     const pointerDown = (el, label = "element") => {
       if (!el) {
@@ -262,13 +264,8 @@
           log("edit_item_waiting", {
             loops,
             menuItemCount: menuItems.length,
-            roleSamples: [...document.querySelectorAll("[role]")]
-              .slice(0, 25)
-              .map(visibleInfo),
-            editTextCandidates: [...document.querySelectorAll("button, div, span, li, a")]
-              .filter((el) => el.innerText?.trim().includes("수정"))
-              .slice(0, 15)
-              .map(visibleInfo),
+            roleElementCount: document.querySelectorAll("[role]").length,
+            editTextCandidateCount: countEditCandidates(),
           });
         }
 
@@ -287,21 +284,19 @@
 
     log("selectors_before_edit", {
       optionButtonCount: document.querySelectorAll('button[aria-label="메시지 옵션"]').length,
+      answerEditButtonCount: document.querySelectorAll('button[aria-label="답변 수정"]').length,
       messageGroupCount: document.querySelectorAll("div[data-message-group-id]").length,
       textareaCount: document.querySelectorAll("textarea").length,
       wrtnMarkdownCount: document.querySelectorAll(".wrtn-markdown").length,
-      ariaButtonLabels: [...document.querySelectorAll("button[aria-label]")]
-        .slice(0, 80)
-        .map((el) => el.getAttribute("aria-label")),
-      messageGroupSamples: [...document.querySelectorAll("div[data-message-group-id]")]
-        .slice(0, 8)
-        .map((el) => ({
-          id: el.getAttribute("data-message-group-id"),
-          text: el.innerText?.trim().slice(0, 220) || "",
-          hasOptionButton: !!el.querySelector('button[aria-label="메시지 옵션"]'),
-          hasTextarea: !!el.querySelector("textarea"),
-          html: el.outerHTML?.slice(0, 700) || "",
-        })),
+      roleElementCount: document.querySelectorAll("[role]").length,
+      buttonAriaLabelCount: document.querySelectorAll("button[aria-label]").length,
+      editTextCandidateCount: countEditCandidates(),
+      messageGroupsWithOptionButtonCount: [...document.querySelectorAll("div[data-message-group-id]")]
+        .filter((el) => el.querySelector('button[aria-label="메시지 옵션"]'))
+        .length,
+      messageGroupsWithTextareaCount: [...document.querySelectorAll("div[data-message-group-id]")]
+        .filter((el) => el.querySelector("textarea"))
+        .length,
     });
 
     const optionButtons = [
@@ -336,11 +331,13 @@
       missedEditMenus,
       messageGroupCount: messageGroups.length,
       textareaCount: textareas.length,
-      textareaSamples: textareas.slice(0, 20).map((el) => ({
-        valueLength: el.value?.length || 0,
-        valueSample: el.value?.slice(0, 220) || "",
-        element: visibleInfo(el),
-      })),
+      nonEmptyTextareaCount: textareas.filter((el) => (el.value || "").trim()).length,
+      visibleTextareaCount: textareas.filter((el) => {
+        const rect = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+      }).length,
+      messageGroupsWithTextareaCount: messageGroups.filter((el) => el.querySelector("textarea")).length,
     });
 
     const rows = messageGroups
@@ -357,8 +354,6 @@
             isUser,
             hasTextarea: !!textarea,
             textareaValueLength: textarea?.value?.length || 0,
-            textSample: groupEl.innerText?.trim().slice(0, 220) || "",
-            html: groupEl.outerHTML?.slice(0, 700) || "",
           });
           return null;
         }
@@ -375,12 +370,8 @@
 
     log("rows_created", {
       rowCount: rows.length,
-      firstRows: rows.slice(0, 5).map((row) => ({
-        name: row.name,
-        is_user: row.is_user,
-        mesLength: row.mes.length,
-        mesSample: row.mes.slice(0, 220),
-      })),
+      userRowCount: rows.filter((row) => row.is_user).length,
+      characterRowCount: rows.filter((row) => !row.is_user).length,
     });
 
     const header = {
