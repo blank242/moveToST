@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Wrtn JSONL Bookmarklet</title>
+  <title>채팅 JSONL Bookmarklet</title>
   <style>
     :root {
       color-scheme: light;
@@ -128,6 +128,23 @@
       grid-template-columns: minmax(0, 1fr) auto;
       gap: 12px;
       align-items: stretch;
+    }
+
+    .source-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .source-tab {
+      min-width: 120px;
+      background: #fffaf0;
+      box-shadow: 3px 3px 0 var(--ink);
+    }
+
+    .source-tab[aria-pressed="true"] {
+      background: var(--mint);
     }
 
     textarea {
@@ -276,8 +293,8 @@
   <main>
     <section class="hero">
       <div>
-        <h1>🍘크랙 이삿짐 싸기🍘</h1>
-        <p class="lead">북마클릿 기능으로 간단하게 크랙 이삿짐을 싸봅시다! SillyTavern용 채팅 파일을 바로 저장할 수 있어요.</p>
+        <h1>🍘이삿짐 싸기🍘</h1>
+        <p class="lead">북마클릿 기능으로 간단하게 크랙과 로판ai 이삿짐을 싸봅시다! SillyTavern용 채팅 파일을 바로 저장할 수 있어요.</p>
         <p class="help"><a href="https://m.blog.naver.com/catives/223375593287" target="_blank">🤨북마클릿이란?</a></p>
       </div>
       <div class="bookmark-visual" aria-hidden="true">
@@ -289,6 +306,10 @@
 
     <section class="panel">
       <h2>북마클릿 복사</h2>
+      <div class="source-tabs" role="group" aria-label="가져올 서비스 선택">
+        <button class="source-tab" type="button" data-source="crack" aria-pressed="true">크랙</button>
+        <button class="source-tab" type="button" data-source="rofanai" aria-pressed="false">로판ai</button>
+      </div>
       <div class="copy-row">
         <textarea id="bookmarklet" readonly spellcheck="false"></textarea>
         <button id="copyButton" type="button">복사하기</button>
@@ -302,7 +323,7 @@
     <section class="panel">
       <h2>사용 방법</h2>
       <ol>
-        <li>위의 <code>복사하기</code> 버튼을 누릅니다.</li>
+        <li>위에서 <code>크랙</code> 또는 <code>로판ai</code>를 고른 뒤 <code>복사하기</code> 버튼을 누릅니다.</li>
         <li>인터넷 브라우저 앱에서 아무 페이지나 열고 <strong>새 북마크</strong>를 만들어줍니다.</li>
         <li>북마크 목록에서 방금 만든 북마크를 찾고 <code>수정</code> 버튼을 누릅니다.</li>
         <li><strong>이름 칸</strong>에는 알아보기 쉬운 새 이름을, <strong>URL 칸</strong>에는 방금 복사한 코드를 붙여넣습니다.</li>
@@ -325,21 +346,55 @@
   </main>
 
   <script>
-    const scriptUrl = new URL("wrtn-export.js", location.href).href;
-    const bookmarklet = `javascript:(()=>{const s=document.createElement("script");s.src="${scriptUrl}?v="+Date.now();document.body.appendChild(s)})();`;
+    const sources = {
+      crack: {
+        label: "크랙",
+        file: "crack-export.js",
+      },
+      rofanai: {
+        label: "로판ai",
+        file: "rofanai-export.js",
+      },
+    };
 
     const textarea = document.querySelector("#bookmarklet");
     const copyButton = document.querySelector("#copyButton");
     const status = document.querySelector("#status");
     const dragLink = document.querySelector("#dragLink");
+    const sourceTabs = [...document.querySelectorAll(".source-tab")];
+    let selectedSource = "crack";
 
-    textarea.value = bookmarklet;
-    dragLink.href = bookmarklet;
+    const makeBookmarklet = (sourceKey) => {
+      const scriptUrl = new URL(sources[sourceKey].file, location.href).href;
+      return `javascript:(()=>{const s=document.createElement("script");s.src="${scriptUrl}?v="+Date.now();document.body.appendChild(s)})();`;
+    };
+
+    const renderBookmarklet = () => {
+      const bookmarklet = makeBookmarklet(selectedSource);
+
+      textarea.value = bookmarklet;
+      dragLink.href = bookmarklet;
+
+      sourceTabs.forEach((button) => {
+        button.setAttribute("aria-pressed", String(button.dataset.source === selectedSource));
+      });
+    };
+
+    sourceTabs.forEach((button) => {
+      button.addEventListener("click", () => {
+        selectedSource = button.dataset.source;
+        renderBookmarklet();
+      });
+    });
+
+    renderBookmarklet();
 
     copyButton.addEventListener("click", async () => {
+      const bookmarklet = makeBookmarklet(selectedSource);
+
       try {
         await navigator.clipboard.writeText(bookmarklet);
-        status.textContent = "복사 완료! 북마크 URL에 붙여넣으면 됩니다.";
+        status.textContent = `${sources[selectedSource].label} 복사 완료! 북마크 URL에 붙여넣으면 됩니다.`;
         alert("복사 완료!");
       } catch {
         textarea.focus();
