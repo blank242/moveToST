@@ -328,7 +328,7 @@
     const outputText =
       outputFormat === "txt"
         ? rows.map((row) => removeExcludedTags(row.mes).trim()).filter(Boolean).join("\n\n")
-        : [JSON.stringify({ chat_metadata: "" }), ...rows.map((row) => JSON.stringify(row))].join("\n");
+        : [JSON.stringify({ chat_metadata: {} }), ...rows.map((row) => JSON.stringify(row))].join("\n");
 
     const blob = new Blob([outputText], {
       type: outputFormat === "txt" ? "text/plain;charset=utf-8" : "application/json;charset=utf-8",
