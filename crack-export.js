@@ -3,10 +3,10 @@
   const debug = [];
   const startedAt = new Date();
 
-  const log = (step, data = {}) => {
-    debug.push({
-      time: new Date().toISOString(),
-      step,
+    const log = (step, data = {}) => {
+      debug.push({
+        time: new Date().toISOString(),
+        step,
       ...data,
     });
   };
@@ -62,35 +62,51 @@
       bodyTextLength: document.body?.innerText?.length || 0,
     });
 
-    const user = prompt("user 이름을 입력하세요", "");
-    if (user === null) {
-      log("cancel_user_prompt");
-      saveDebugLog("cancel_user_prompt");
-      return;
+    const outputFormatInput = prompt("저장 형식을 입력하세요. jsonl 또는 txt", "jsonl") || "jsonl";
+
+    const outputFormat = outputFormatInput.trim().toLowerCase() === "txt" ? "txt" : "jsonl";
+    const excludedTagInput =
+      outputFormat === "txt"
+        ? prompt("내용에서 제외할 태그가 있다면 입력해주세요. 여러 개라면 띄어쓰기 없이 쉼표로 구분해주세요.", "<details>")
+        : "";
+
+    const excludedTagNames = String(excludedTagInput || "")
+      .split(",")
+      .map((tag) => tag.trim().replace(/^<\s*\/?\s*/, "").replace(/\s*\/?\s*>$/, "").split(/\s+/)[0])
+      .filter(Boolean);
+
+    let user = "";
+    let char = "";
+
+    if (outputFormat === "jsonl") {
+      user = prompt("user 이름을 입력하세요", "") || "";
+      char = prompt("ai 캐릭터의 이름을 입력하세요", "") || "";
     }
 
-    const char = prompt("ai 캐릭터의 이름을 입력하세요", "");
-    if (char === null) {
-      log("cancel_char_prompt");
-      saveDebugLog("cancel_char_prompt");
-      return;
+    const defaultFileName = `messages.${outputFormat}`;
+
+    let fileName = prompt("저장할 파일명을 입력하세요", defaultFileName) || defaultFileName;
+
+    fileName = fileName.trim() || defaultFileName;
+    if (!fileName.toLowerCase().endsWith(`.${outputFormat}`)) {
+      fileName = fileName.replace(/\.(jsonl|txt)$/i, "");
+      fileName += `.${outputFormat}`;
     }
 
-    let fileName = prompt("저장할 파일명을 입력하세요", "messages.jsonl");
-    if (fileName === null) {
-      log("cancel_file_prompt");
-      saveDebugLog("cancel_file_prompt");
-      return;
-    }
-
-    fileName = fileName.trim() || "messages.jsonl";
-    if (!fileName.toLowerCase().endsWith(".jsonl")) {
-      fileName += ".jsonl";
-    }
-
-    log("prompt_done", { user, char, fileName });
+    log("prompt_done", { user, char, fileName, outputFormat, excludedTagNames });
 
     const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    const removeExcludedTags = (text) =>
+      excludedTagNames.reduce((currentText, tagName) => {
+        const escapedTagName = escapeRegExp(tagName);
+        return currentText.replace(
+          new RegExp(`<\\s*${escapedTagName}\\b[^>]*>[\\s\\S]*?<\\s*\\/\\s*${escapedTagName}\\s*>`, "gi"),
+          ""
+        );
+      }, text);
 
     const escapeAttr = (value) =>
       String(value)
@@ -359,7 +375,8 @@
       .reverse()
       .map((groupEl, index) => {
         const textarea = groupEl.querySelector("textarea");
-        const mes = markdownToHtml(textarea?.value || "");
+        const textMes = String(textarea?.value || "").trim();
+        const mes = markdownToHtml(textMes);
         const isUser = !!groupEl.querySelector('button[aria-label="메시지 옵션"]');
 
         if (!mes) {
@@ -379,6 +396,7 @@
           is_system: false,
           send_date: "",
           mes,
+          textMes,
           extra: {},
           force_avatar: "",
         };
@@ -391,9 +409,18 @@
       characterRowCount: rows.filter((row) => !row.is_user).length,
     });
 
-    const jsonl = rows.map((row) => JSON.stringify(row)).join("\n");
+    const outputText =
+      outputFormat === "txt"
+        ? rows.map((row) => removeExcludedTags(row.textMes).trim()).filter(Boolean).join("\n\n")
+        : rows
+            .map(({ textMes, ...row }) => JSON.stringify(row))
+            .join("\n");
 
-    saveTextFile(jsonl, fileName, "application/jsonl;charset=utf-8");
+    saveTextFile(
+      outputText,
+      fileName,
+      outputFormat === "txt" ? "text/plain;charset=utf-8" : "application/jsonl;charset=utf-8"
+    );
     saveDebugLog(rows.length === 0 ? "zero_rows" : "success");
 
     alert(`${rows.length}개 메시지 저장 완료\n파일명: ${fileName}\n디버그 로그도 함께 저장했습니다.`);
