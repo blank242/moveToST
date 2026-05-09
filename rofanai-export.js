@@ -236,16 +236,15 @@
       throw new Error("currentChatId 없음");
     }
 
-    const defaultFileNameBase = outputFormat === "txt" ? "messages" : getDefaultFileNameBase(characterName);
+    const defaultFileNameBase = getDefaultFileNameBase(characterName);
 
-    const outputFileNameBase = (
-      prompt("저장할 파일명을 입력하세요. 확장자는 제외하고 입력해주세요.", defaultFileNameBase) || defaultFileNameBase
-    )
-      .trim()
-      .replace(/\.(jsonl|txt)$/i, "");
+const outputFileNameBase = (
+  prompt("저장할 파일명을 입력하세요. 확장자는 제외하고 입력해주세요.", defaultFileNameBase) || defaultFileNameBase
+)
+  .trim()
+  .replace(/\.(jsonl|json|txt)+$/i, "");
 
-    const outputFileName = `${outputFileNameBase || defaultFileNameBase}.${outputFormat}`;
-
+const outputFileName = `${outputFileNameBase || defaultFileNameBase}.${outputFormat}`;
     function makeMes(str) {
       if (skipConvertTexts.some((text) => str.includes(text))) {
         return str;
@@ -330,9 +329,7 @@
         ? rows.map((row) => removeExcludedTags(row.mes).trim()).filter(Boolean).join("\n\n")
         : [JSON.stringify({ chat_metadata: {} }), ...rows.map((row) => JSON.stringify(row))].join("\n");
 
-    const blob = new Blob([outputText], {
-      type: outputFormat === "txt" ? "text/plain;charset=utf-8" : "application/json;charset=utf-8",
-    });
+    const blob = new Blob([outputText]);
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = outputFileName;
