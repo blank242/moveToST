@@ -329,7 +329,11 @@ const outputFileName = `${outputFileNameBase || defaultFileNameBase}.${outputFor
         ? rows.map((row) => removeExcludedTags(row.mes).trim()).filter(Boolean).join("\n\n")
         : [JSON.stringify({ chat_metadata: {} }), ...rows.map((row) => JSON.stringify(row))].join("\n");
 
-    const blob = new Blob([outputText]);
+    const blob = new Blob([outputText], {
+        type: outputFormat === "txt"
+        ? "text/plain;charset=utf-8"
+        : "application/octet-stream",
+    });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = outputFileName;
