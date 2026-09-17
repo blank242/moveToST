@@ -253,6 +253,325 @@
     );
   }
 
+  function randomDelay(minMs, maxMs) {
+    const ms = minMs + Math.random() * (maxMs - minMs);
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async function fetchAllEpisodes(chatId) {
+    const episodes = [];
+    const limit = 20;
+    let offset = 0;
+
+    while (true) {
+      const response = await fetch(
+        "https://rofan.ai/api/chat/episode/GetEpisodes",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ chatId, offset, limit, sort: "oldest" }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`에피소드 요약 요청 실패: ${response.status}`);
+      }
+
+      const data = await response.json();
+      episodes.push(...(data?.episodes || []));
+
+      if (!data?.hasMore) break;
+      offset += limit;
+
+      await randomDelay(300, 900);
+    }
+
+    return episodes;
+  }
+
+  async function fetchAllChatLogs(chatId, limit = 20) {
+    const pageList = [];
+    const seenKeys = new Set();
+    let beforeTimestamp = undefined;
+    let previousCursor = undefined;
+
+    while (true) {
+      const body = { chatId, limit };
+      if (beforeTimestamp) body.beforeTimestamp = beforeTimestamp;
+
+      const response = await fetch("https://rofan.ai/api/chat/GetChatLogs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        throw new Error(`채팅 로그 요청 실패: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const page = Array.isArray(data) ? data : data?.logs || [];
+
+      if (!page.length) break;
+
+      // 같은 구간이 겹쳐 다시 오더라도 중복은 걸러냄 (커서 방향 오판 방지용 안전장치)
+      const uniquePage = page.filter((item) => {
+        const key = `${item.created}|${item.user_chat || ""}|${item.bot_chat || ""}`;
+        if (seenKeys.has(key)) return false;
+        seenKeys.add(key);
+        return true;
+      });
+
+      pageList.push(uniquePage);
+
+      if (page.length < limit) break;
+
+      // 페이지는 오래된→최신 순으로 오므로, 다음 커서는 이 페이지의 가장 오래된(첫) 항목
+      const oldestInPage = page[0]?.created;
+      if (!oldestInPage || oldestInPage === previousCursor) break;
+
+      previousCursor = oldestInPage;
+      beforeTimestamp = oldestInPage;
+
+      await randomDelay(300, 900);
+    }
+
+    // 페이지 자체는 최신 구간부터 수집되므로 페이지 순서만 뒤집고, 페이지 내부(오래된→최신) 순서는 유지
+    return pageList.reverse().flat();
+  }
+
+  function makeSummaryWorldInfoEntry(episodes) {
+    const body = episodes
+      .filter((ep) => ep?.title || ep?.summary)
+      .map((ep) => `- ${ep.title}:\n${ep.summary}`)
+      .join("\n\n");
+
+    if (!body) return null;
+
+    return {
+      id: 0,
+      keys: [],
+      secondary_keys: [],
+      comment: "이전 에피소드 요약",
+      content: `<summary>\n${body}\n</summary>`,
+      constant: true,
+      selective: false,
+      insertion_order: 0,
+      enabled: true,
+      position: "before_char",
+      extensions: {},
+    };
+  }
+
+  const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+  function crc32(bytes) {
+    if (!crc32.table) {
+      const table = [];
+      for (let n = 0; n < 256; n++) {
+        let c = n;
+        for (let k = 0; k < 8; k++) {
+          c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+        }
+        table[n] = c >>> 0;
+      }
+      crc32.table = table;
+    }
+
+    let crc = 0xffffffff;
+    for (let i = 0; i < bytes.length; i++) {
+      crc = crc32.table[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+
+  function parsePngChunks(bytes) {
+    for (let i = 0; i < PNG_SIGNATURE.length; i++) {
+      if (bytes[i] !== PNG_SIGNATURE[i]) {
+        throw new Error("PNG 시그니처가 아닙니다.");
+      }
+    }
+
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const chunks = [];
+    let offset = PNG_SIGNATURE.length;
+
+    while (offset < bytes.length) {
+      const length = view.getUint32(offset, false);
+      const type = String.fromCharCode(
+        bytes[offset + 4],
+        bytes[offset + 5],
+        bytes[offset + 6],
+        bytes[offset + 7]
+      );
+      const dataStart = offset + 8;
+      const data = bytes.slice(dataStart, dataStart + length);
+
+      chunks.push({ type, data });
+      offset = dataStart + length + 4;
+    }
+
+    return chunks;
+  }
+
+  function buildPngChunk(type, data) {
+    const typeBytes = new Uint8Array(4);
+    for (let i = 0; i < 4; i++) {
+      typeBytes[i] = type.charCodeAt(i);
+    }
+
+    const typeAndData = new Uint8Array(typeBytes.length + data.length);
+    typeAndData.set(typeBytes, 0);
+    typeAndData.set(data, typeBytes.length);
+
+    const chunk = new Uint8Array(4 + typeAndData.length + 4);
+    new DataView(chunk.buffer).setUint32(0, data.length, false);
+    chunk.set(typeAndData, 4);
+    new DataView(chunk.buffer).setUint32(4 + typeAndData.length, crc32(typeAndData), false);
+
+    return chunk;
+  }
+
+  function encodePngChunks(chunks) {
+    const parts = [new Uint8Array(PNG_SIGNATURE), ...chunks.map((c) => buildPngChunk(c.type, c.data))];
+    const totalLength = parts.reduce((sum, part) => sum + part.length, 0);
+    const out = new Uint8Array(totalLength);
+
+    let offset = 0;
+    for (const part of parts) {
+      out.set(part, offset);
+      offset += part.length;
+    }
+
+    return out;
+  }
+
+  function uint8ArrayToBase64(bytes) {
+    let binary = "";
+    const chunkSize = 0x8000;
+
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+    }
+
+    return btoa(binary);
+  }
+
+  function makeTextChunkData(keyword, text) {
+    const keywordBytes = new TextEncoder().encode(keyword);
+    const textBytes = new TextEncoder().encode(text);
+    const data = new Uint8Array(keywordBytes.length + 1 + textBytes.length);
+
+    data.set(keywordBytes, 0);
+    data[keywordBytes.length] = 0;
+    data.set(textBytes, keywordBytes.length + 1);
+
+    return data;
+  }
+
+  function embedCharacterCardIntoPng(pngBytes, card) {
+    const chunks = parsePngChunks(pngBytes).filter((chunk) => {
+      if (chunk.type !== "tEXt") return true;
+
+      const nullIndex = chunk.data.indexOf(0);
+      const keyword = new TextDecoder().decode(chunk.data.slice(0, nullIndex));
+
+      return keyword !== "chara";
+    });
+
+    const base64Data = uint8ArrayToBase64(new TextEncoder().encode(JSON.stringify(card)));
+    const charaChunk = { type: "tEXt", data: makeTextChunkData("chara", base64Data) };
+
+    const iendIndex = chunks.findIndex((chunk) => chunk.type === "IEND");
+    chunks.splice(iendIndex === -1 ? chunks.length : iendIndex, 0, charaChunk);
+
+    return encodePngChunks(chunks);
+  }
+
+  function corsProxyUrl(imageUrl) {
+    return `https://images.weserv.nl/?url=${encodeURIComponent(imageUrl)}`;
+  }
+
+  async function fetchImageBlob(imageUrl) {
+    try {
+      const response = await fetch(imageUrl);
+      if (!response.ok) {
+        throw new Error(`캐릭터 이미지 요청 실패: ${response.status}`);
+      }
+      return await response.blob();
+    } catch (directError) {
+      try {
+        const response = await fetch(corsProxyUrl(imageUrl));
+        if (!response.ok) {
+          throw new Error(`프록시 경유 이미지 요청 실패: ${response.status}`);
+        }
+        return await response.blob();
+      } catch (proxyError) {
+        throw new Error(
+          `이미지 요청 실패(CORS 차단 가능성, 프록시도 실패): ${
+            proxyError?.message || proxyError
+          }`
+        );
+      }
+    }
+  }
+
+  async function fetchImageAsPngBytes(imageUrl) {
+    const blob = await fetchImageBlob(imageUrl);
+
+    let bitmap;
+    try {
+      bitmap = await createImageBitmap(blob);
+    } catch (error) {
+      throw new Error(`이미지 디코딩 실패: ${error?.message || error}`);
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    canvas.getContext("2d").drawImage(bitmap, 0, 0);
+
+    const pngBlob = await new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (result) =>
+          result
+            ? resolve(result)
+            : reject(new Error("캔버스 PNG 변환 실패(CORS로 캔버스 오염 가능성)")),
+        "image/png"
+      );
+    });
+
+    return new Uint8Array(await pngBlob.arrayBuffer());
+  }
+
+  function downloadUrlDirectly(url, fileName) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    a.target = "_blank";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  function downloadBlobFile(blob, fileName) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    setTimeout(() => {
+      URL.revokeObjectURL(a.href);
+    }, 1000);
+  }
+
   if (window.__rofanAiJsonlExporterRunning) {
     alert("이미 실행 중입니다.");
     return;
@@ -336,7 +655,7 @@
 
     const fstMsg = props?.oriBotDetail?.first_message || "";
     const currentChatId = props?.chatId;
-    const chatIndex = Number(props?.oriChatData?.chat_count) || 100;
+    const chatCount = Number(props?.oriChatData?.chat_count) || 0;
     const characterName =
       props?.oriChatData?.char ||
       props?.oriBotDetail?.char ||
@@ -381,26 +700,16 @@
       collectedMessageCount++;
     }
 
-    const response = await fetch("https://rofan.ai/api/chat/GetChatLogs", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        chatId: currentChatId,
-        limit: chatIndex,
-        offset: 0,
-      }),
-    });
+    const estimatedPages = Math.max(1, Math.ceil(chatCount / 20));
+    const estimatedMinutes = Math.max(1, Math.ceil((estimatedPages * 1.1) / 60));
 
-    if (!response.ok) {
-      throw new Error(`채팅 로그 요청 실패: ${response.status}`);
-    }
+    alert(
+      `총 메시지 ${chatCount}개 확인.\n` +
+      `약 ${estimatedMinutes}분 이상 걸려요. 완료 메시지가 뜰 때까지 이 창에서 기다려주세요.`
+    );
 
-    const data = await response.json();
-    console.log("[RofanAI Chat Logs]", data);
-
-    const chatLogs = Array.isArray(data) ? data : [];
+    const chatLogs = await fetchAllChatLogs(currentChatId, 20);
+    console.log("[RofanAI Chat Logs]", chatLogs);
 
     for (const item of chatLogs) {
       if (item?.user_chat) {
@@ -445,7 +754,45 @@
             ...rows.map((row) => JSON.stringify(row)),
           ].join("\n");
 
+    const episodes = await fetchAllEpisodes(currentChatId);
+    console.log("[RofanAI Episodes]", episodes);
+
+    const summaryWorldInfoEntry = makeSummaryWorldInfoEntry(episodes);
+
     const card = makeCharacterCardFromProps(props);
+
+    if (summaryWorldInfoEntry) {
+      card.data.character_book = {
+        name: `${characterName} 요약 로어북`,
+        entries: [summaryWorldInfoEntry],
+      };
+    }
+
+    const charImageUrl = props?.oriBotDetail?.char_image || "";
+    let cardPngBlob = null;
+
+    if (charImageUrl) {
+      try {
+        const pngBytes = await fetchImageAsPngBytes(charImageUrl);
+        cardPngBlob = new Blob([embedCharacterCardIntoPng(pngBytes, card)], {
+          type: "image/png",
+        });
+      } catch (error) {
+        const detail = error?.message || String(error);
+        console.error("캐릭터 카드 PNG 생성 실패:", detail);
+
+        const imageExt = (charImageUrl.split(".").pop() || "webp").split("?")[0];
+        downloadUrlDirectly(charImageUrl, `${safeBaseName}_image.${imageExt}`);
+
+        alert(
+          `캐릭터 카드 PNG 생성 실패, JSON + 원본 이미지 파일로 저장합니다.\n${detail}`
+        );
+      }
+    }
+
+    const cardOutputFileName = cardPngBlob
+      ? `${safeBaseName}_character.png`
+      : cardFileName;
 
     downloadTextFile(
       chatOutputText,
@@ -456,16 +803,20 @@
     );
 
     setTimeout(() => {
-      downloadJsonFile(card, cardFileName);
+      if (cardPngBlob) {
+        downloadBlobFile(cardPngBlob, cardOutputFileName);
+      } else {
+        downloadJsonFile(card, cardOutputFileName);
+      }
     }, 500);
 
     console.log("채팅 저장 완료:", chatFileName);
-    console.log("캐릭터 카드 저장 완료:", cardFileName, card);
+    console.log("캐릭터 카드 저장 완료:", cardOutputFileName, card);
 
     alert(
       `${collectedMessageCount}개 메시지 저장 완료!\n` +
       `채팅 파일: ${chatFileName}\n` +
-      `캐릭터 카드: ${cardFileName}`
+      `캐릭터 카드: ${cardOutputFileName}`
     );
   } catch (error) {
     console.error("요청 실패:", error);
